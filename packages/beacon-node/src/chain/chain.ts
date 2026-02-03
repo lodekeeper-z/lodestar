@@ -3,7 +3,7 @@ import {PrivateKey} from "@libp2p/interface";
 import {PubkeyIndexMap} from "@chainsafe/pubkey-index-map";
 import {CompositeTypeAny, TreeView, Type} from "@chainsafe/ssz";
 import {BeaconConfig} from "@lodestar/config";
-import {CheckpointWithHex, IForkChoice, ProtoBlock, UpdateHeadOpt} from "@lodestar/fork-choice";
+import {CheckpointWithHex, ForkChoiceStateGetter, IForkChoice, ProtoBlock, UpdateHeadOpt} from "@lodestar/fork-choice";
 import {LoggerNode} from "@lodestar/logger/node";
 import {EFFECTIVE_BALANCE_INCREMENT, GENESIS_SLOT, SLOTS_PER_EPOCH, isForkPostElectra} from "@lodestar/params";
 import {
@@ -371,10 +371,10 @@ export class BeaconChain implements IBeaconChain {
     blockStateCache.setHeadState(anchorState);
     checkpointStateCache.add(checkpoint, anchorState);
 
-    const forkChoiceStateGetters = {
-      blockStateGetter: (stateRoot: RootHex) => blockStateCache.get(stateRoot, {dontTransferCache: true}),
-      checkpointStateGetter: (checkpoint: CheckpointWithHex) =>
-        checkpointStateCache.get({epoch: checkpoint.epoch, rootHex: checkpoint.rootHex}, {dontTransferCache: true}),
+    const forkChoiceStateGetter: ForkChoiceStateGetter = ({stateRoot, checkpoint}) => {
+      if (stateRoot) return blockStateCache.get(stateRoot);
+      if (checkpoint) return checkpointStateCache.get(checkpoint);
+      return null;
     };
 
     const forkChoice = initializeForkChoice(
@@ -385,9 +385,9 @@ export class BeaconChain implements IBeaconChain {
       isAnchorStateFinalized,
       opts,
       this.justifiedBalancesGetter.bind(this),
+      forkChoiceStateGetter,
       metrics,
-      logger,
-      forkChoiceStateGetters
+      logger
     );
     const regen = new QueuedStateRegenerator({
       config,
